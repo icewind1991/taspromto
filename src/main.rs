@@ -18,9 +18,14 @@ async fn main() {
     let host_port = dotenv::var("PORT")
         .ok()
         .and_then(|port| u16::from_str(&port).ok())
-        .unwrap_or(3030);
+        .unwrap_or(80);
 
     let device_states = DeviceStates::default();
+
+    ctrlc::set_handler(move || {
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
 
     tokio::task::spawn(mqtt_client(mqtt_host, mqtt_port, device_states.clone()));
 
@@ -71,7 +76,7 @@ async fn main() {
             response
         });
 
-    warp::serve(metrics).run(([127, 0, 0, 1], host_port)).await;
+    warp::serve(metrics).run(([0, 0, 0, 0], host_port)).await;
 }
 
 async fn mqtt_client(host: String, port: u16, device_states: DeviceStates) {
