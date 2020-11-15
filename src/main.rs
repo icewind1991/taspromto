@@ -37,8 +37,9 @@ async fn main() {
             for device in state.iter() {
                 writeln!(
                     &mut response,
-                    "switch_state[name=\"{}\"] {}",
+                    "switch_state{{tasmota_id=\"{}\", name=\"{}\"}} {}",
                     device.key().hostname,
+                    device.name,
                     if device.state { 1 } else { 0 }
                 )
                 .unwrap();
@@ -46,8 +47,9 @@ async fn main() {
                 if let Some(power_watts) = device.power_watts {
                     writeln!(
                         &mut response,
-                        "power_watts[name=\"{}\"] {}",
+                        "power_watts{{tasmota_id=\"{}\", name=\"{}\"}} {}",
                         device.key().hostname,
+                        device.name,
                         power_watts
                     )
                     .unwrap();
@@ -56,8 +58,9 @@ async fn main() {
                 if let Some(power_yesterday) = device.power_yesterday {
                     writeln!(
                         &mut response,
-                        "power_yesterday_kwh[name=\"{}\"] {}",
+                        "power_yesterday_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
                         device.key().hostname,
+                        device.name,
                         power_yesterday
                     )
                     .unwrap();
@@ -66,8 +69,9 @@ async fn main() {
                 if let Some(power_today) = device.power_today {
                     writeln!(
                         &mut response,
-                        "power_today_kwh[name=\"{}\"] {}",
+                        "power_today_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
                         device.key().hostname,
+                        device.name,
                         power_today
                     )
                     .unwrap();
@@ -96,6 +100,10 @@ async fn mqtt_client(host: String, port: u16, device_states: DeviceStates) {
         .subscribe("tele/+/+/SENSOR", QoS::AtMostOnce)
         .await
         .unwrap();
+    client
+        .subscribe("stat/+/+/RESULT", QoS::AtMostOnce)
+        .await
+        .unwrap();
 
     loop {
         let notification = event_loop.poll().await.unwrap();
@@ -105,10 +113,19 @@ async fn mqtt_client(host: String, port: u16, device_states: DeviceStates) {
 
             match topic {
                 Topic::LWT(device) => {
-                    // on discovery, ask the device for it's power state
+                    // on discovery, ask the device for it's power state and name
                     client
                         .publish(
                             device.get_topic("cmnd", "POWER"),
+                            QoS::AtMostOnce,
+                            false,
+                            "",
+                        )
+                        .await
+                        .unwrap();
+                    client
+                        .publish(
+                            device.get_topic("cmnd", "DeviceName"),
                             QoS::AtMostOnce,
                             false,
                             "",
@@ -119,6 +136,15 @@ async fn mqtt_client(host: String, port: u16, device_states: DeviceStates) {
                 Topic::Power(device) => {
                     let state = message.payload.as_ref() == b"ON";
                     device_states.entry(device).or_default().state = state;
+                }
+                Topic::Result(device) => {
+                    let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
+                    if let Ok(json) = json::parse(payload) {
+                        let mut device_state = device_states.entry(device).or_default();
+                        if json["DeviceName"].is_string() {
+                            device_state.name = json["DeviceName"].to_string();
+                        }
+                    }
                 }
                 Topic::Sensor(device) => {
                     let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
@@ -156,6 +182,7 @@ impl Device {
 #[derive(Debug, Default)]
 struct DeviceState {
     state: bool,
+    name: String,
     power_watts: Option<f32>,
     power_yesterday: Option<f32>,
     power_today: Option<f32>,
@@ -167,6 +194,7 @@ enum Topic {
     Power(Device),
     State(Device),
     Sensor(Device),
+    Result(Device),
     Other(String),
 }
 
@@ -185,6 +213,7 @@ impl From<&str> for Topic {
                 ("tele", "STATE") => Topic::State(device),
                 ("stat", "POWER") => Topic::Power(device),
                 ("tele", "SENSOR") => Topic::Sensor(device),
+                ("stat", "RESULT") => Topic::Result(device),
                 _ => Topic::Other(raw.to_string()),
             }
         } else {
@@ -214,5 +243,9 @@ fn parse_topic() {
     assert_eq!(
         Topic::Sensor(device.clone()),
         Topic::from("tele/foo/hostname/SENSOR")
+    );
+    assert_eq!(
+        Topic::Result(device.clone()),
+        Topic::from("stat/foo/hostname/RESULT")
     );
 }
