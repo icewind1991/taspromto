@@ -115,6 +115,11 @@ async fn mqtt_client(host: &str, port: u16, device_states: DeviceStates) {
 
     while let Ok(notification) = event_loop.poll().await {
         if let Event::Incoming(Packet::Publish(message)) = notification {
+            println!(
+                "{} {}",
+                message.topic,
+                std::str::from_utf8(message.payload.as_ref()).unwrap_or_default()
+            );
             let topic = Topic::from(message.topic.as_str());
 
             match topic {
