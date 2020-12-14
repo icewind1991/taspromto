@@ -1,3 +1,5 @@
+use json::JsonValue;
+use std::convert::TryFrom;
 use std::fmt::Write;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -19,6 +21,32 @@ pub struct DeviceState {
     pub power_watts: Option<f32>,
     pub power_yesterday: Option<f32>,
     pub power_today: Option<f32>,
+}
+
+impl DeviceState {
+    pub fn update(&mut self, json: JsonValue) {
+        if json["DeviceName"].is_string() && !json["DeviceName"].is_empty() {
+            self.name = json["DeviceName"].to_string();
+        }
+        if let Some(power) = json["ENERGY"]["Power"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_watts = Some(power);
+        }
+        if let Some(yesterday) = json["ENERGY"]["Yesterday"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_yesterday = Some(yesterday);
+        }
+        if let Some(today) = json["ENERGY"]["Today"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_today = Some(today);
+        }
+    }
 }
 
 pub fn format_device_state<W: Write>(

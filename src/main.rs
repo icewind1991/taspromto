@@ -11,7 +11,6 @@ use color_eyre::{eyre::WrapErr, Result};
 use dashmap::DashMap;
 use pin_utils::pin_mut;
 use rumqttc::{MqttOptions, QoS};
-use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::stream::StreamExt;
 use tokio::time::Duration;
@@ -79,22 +78,31 @@ async fn mqtt_client(host: &str, port: u16, device_states: DeviceStates) -> Resu
         match topic {
             Topic::LWT(device) => {
                 // on discovery, ask the device for it's power state and name
-                client
-                    .publish(
-                        device.get_topic("cmnd", "POWER"),
-                        QoS::AtMostOnce,
-                        false,
-                        "",
-                    )
-                    .await?;
-                client
-                    .publish(
-                        device.get_topic("cmnd", "DeviceName"),
-                        QoS::AtMostOnce,
-                        false,
-                        "",
-                    )
-                    .await?;
+                let send_client = client.clone();
+                tokio::task::spawn(async move {
+                    if let Err(e) = send_client
+                        .publish(
+                            device.get_topic("cmnd", "POWER"),
+                            QoS::AtMostOnce,
+                            false,
+                            "",
+                        )
+                        .await
+                    {
+                        eprintln!("Failed to ask for power state: {:#}", e);
+                    }
+                    if let Err(e) = send_client
+                        .publish(
+                            device.get_topic("cmnd", "DeviceName"),
+                            QoS::AtMostOnce,
+                            false,
+                            "",
+                        )
+                        .await
+                    {
+                        eprintln!("Failed to ask for device name: {:#}", e);
+                    }
+                });
             }
             Topic::Power(device) => {
                 let state = message.payload.as_ref() == b"ON";
@@ -102,29 +110,17 @@ async fn mqtt_client(host: &str, port: u16, device_states: DeviceStates) -> Resu
             }
             Topic::Result(device) => {
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
+                dbg!(payload);
                 if let Ok(json) = json::parse(payload) {
                     let mut device_state = device_states.entry(device).or_default();
-                    if json["DeviceName"].is_string() {
-                        let name = json["DeviceName"].to_string();
-                        if !name.is_empty() {
-                            device_state.name = name;
-                        }
-                    }
+                    device_state.update(json);
                 }
             }
             Topic::Sensor(device) => {
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
                 if let Ok(json) = json::parse(payload) {
                     let mut device_state = device_states.entry(device).or_default();
-                    device_state.power_watts = json["ENERGY"]["Power"]
-                        .as_number()
-                        .map(|num| f32::try_from(num).unwrap_or_default());
-                    device_state.power_yesterday = json["ENERGY"]["Yesterday"]
-                        .as_number()
-                        .map(|num| f32::try_from(num).unwrap_or_default());
-                    device_state.power_today = json["ENERGY"]["Today"]
-                        .as_number()
-                        .map(|num| f32::try_from(num).unwrap_or_default());
+                    device_state.update(json);
                 }
             }
             _ => {}
