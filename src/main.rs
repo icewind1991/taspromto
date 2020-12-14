@@ -105,7 +105,10 @@ async fn mqtt_client(host: &str, port: u16, device_states: DeviceStates) -> Resu
                 if let Ok(json) = json::parse(payload) {
                     let mut device_state = device_states.entry(device).or_default();
                     if json["DeviceName"].is_string() {
-                        device_state.name = json["DeviceName"].to_string();
+                        let name = json["DeviceName"].to_string();
+                        if !name.is_empty() {
+                            device_state.name = name;
+                        }
                     }
                 }
             }
