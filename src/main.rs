@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::device::{format_device_state, Device, DeviceState};
 use crate::mqtt::mqtt_stream;
 use crate::topic::Topic;
-use color_eyre::{eyre::WrapErr, Result};
+use color_eyre::{eyre::WrapErr, Report, Result};
 use dashmap::DashMap;
 use pin_utils::pin_mut;
 use rumqttc::{MqttOptions, QoS};
@@ -31,9 +31,11 @@ async fn main() -> Result<()> {
     .expect("Error setting Ctrl-C handler");
 
     let states = device_states.clone();
+    let mqtt_host = config.mqtt_host;
+    let mqtt_port = config.mqtt_port;
     tokio::task::spawn(async move {
         loop {
-            if let Err(e) = mqtt_client(&config.mqtt_host, config.mqtt_port, states.clone()).await {
+            if let Err(e) = mqtt_client(&mqtt_host, mqtt_port, states.clone()).await {
                 eprintln!("lost mqtt collection: {:#}", e);
             }
             eprintln!("reconnecting after 1s");
@@ -42,12 +44,20 @@ async fn main() -> Result<()> {
     });
 
     let state = warp::any().map(move || device_states.clone());
+
+    let mi_temp_names = config.mi_temp_names;
     let metrics = warp::path!("metrics")
         .and(state)
-        .map(|state: DeviceStates| {
+        .map(move |state: DeviceStates| {
             let mut response = String::new();
             for device in state.iter() {
-                format_device_state(&mut response, &device.key(), &device.value()).unwrap();
+                format_device_state(
+                    &mut response,
+                    &device.key(),
+                    &device.value(),
+                    &mi_temp_names,
+                )
+                .unwrap();
             }
             response
         });
@@ -57,7 +67,10 @@ async fn main() -> Result<()> {
 }
 
 async fn mqtt_client(host: &str, port: u16, device_states: DeviceStates) -> Result<()> {
-    let mut mqtt_options = MqttOptions::new("taspromto", host, port);
+    let hostname = hostname::get()?
+        .into_string()
+        .map_err(|_| Report::msg("invalid hostname"))?;
+    let mut mqtt_options = MqttOptions::new(format!("taspromto-{}", hostname), host, port);
     mqtt_options.set_keep_alive(5);
 
     let (client, stream) = mqtt_stream(mqtt_options)
@@ -104,13 +117,9 @@ async fn mqtt_client(host: &str, port: u16, device_states: DeviceStates) -> Resu
                     }
                 });
             }
-            Topic::Power(device) => {
-                let state = message.payload.as_ref() == b"ON";
-                device_states.entry(device).or_default().state = state;
-            }
+            Topic::Power(_) => {}
             Topic::Result(device) => {
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
-                dbg!(payload);
                 if let Ok(json) = json::parse(payload) {
                     let mut device_state = device_states.entry(device).or_default();
                     device_state.update(json);
