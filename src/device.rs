@@ -23,6 +23,7 @@ pub struct DeviceState {
     pub power_watts: Option<f32>,
     pub power_yesterday: Option<f32>,
     pub power_today: Option<f32>,
+    pub co2: Option<f32>,
     pub mi_temp_devices: BTreeMap<BDAddr, MiTempState>,
 }
 
@@ -51,6 +52,12 @@ impl DeviceState {
             .and_then(|num| f32::try_from(num).ok())
         {
             self.power_today = Some(today);
+        }
+        if let Some(today) = json["MHZ19B"]["CarbonDioxide"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.co2 = Some(today);
         }
 
         for (key, value) in json.entries() {
@@ -141,6 +148,14 @@ pub fn format_device_state<W: Write>(
             writer,
             "power_today_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
             device.hostname, state.name, power_today
+        )?;
+    }
+
+    if let Some(co2) = state.co2 {
+        writeln!(
+            writer,
+            "sensor_co2{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+            device.hostname, state.name, co2
         )?;
     }
 
