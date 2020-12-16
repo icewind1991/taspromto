@@ -1,5 +1,6 @@
 use crate::device::BDAddr;
 use color_eyre::{eyre::WrapErr, Report, Result};
+use rumqttc::MqttOptions;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -9,6 +10,12 @@ pub struct Config {
     pub mqtt_port: u16,
     pub host_port: u16,
     pub mi_temp_names: BTreeMap<BDAddr, String>,
+    pub mqtt_credentials: Option<Credentials>,
+}
+
+pub struct Credentials {
+    username: String,
+    password: String,
 }
 
 impl Config {
@@ -40,11 +47,37 @@ impl Config {
             })
             .collect::<Result<BTreeMap<BDAddr, String>, Report>>()?;
 
+        let mqtt_credentials = match dotenv::var("MQTT_USERNAME") {
+            Ok(username) => {
+                let password = dotenv::var("MQTT_PASSWORD")
+                    .wrap_err("MQTT_USERNAME set, but MQTT_PASSWORD not set")?;
+                Some(Credentials { username, password })
+            }
+            Err(_) => None,
+        };
+
         Ok(Config {
             mqtt_host,
             mqtt_port,
             host_port,
             mi_temp_names,
+            mqtt_credentials,
         })
+    }
+
+    pub fn mqtt(&self) -> Result<MqttOptions> {
+        let hostname = hostname::get()?
+            .into_string()
+            .map_err(|_| Report::msg("invalid hostname"))?;
+        let mut mqtt_options = MqttOptions::new(
+            format!("taspromto-{}", hostname),
+            &self.mqtt_host,
+            self.mqtt_port,
+        );
+        if let Some(credentials) = self.mqtt_credentials.as_ref() {
+            mqtt_options.set_credentials(&credentials.username, &credentials.password);
+        }
+        mqtt_options.set_keep_alive(5);
+        Ok(mqtt_options)
     }
 }
