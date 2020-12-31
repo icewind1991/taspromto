@@ -160,7 +160,7 @@ pub fn format_device_state<W: Write>(
     }
 
     for (addr, state) in state.mi_temp_devices.iter() {
-        format_mi_temp_state(&mut writer, *addr, mi_temp_names, state)?;
+        format_mi_temp_state(&mut writer, device, *addr, mi_temp_names, state)?;
     }
 
     Ok(())
@@ -168,6 +168,7 @@ pub fn format_device_state<W: Write>(
 
 pub fn format_mi_temp_state<W: Write>(
     mut writer: W,
+    device: &Device,
     addr: BDAddr,
     names: &BTreeMap<BDAddr, String>,
     state: &MiTempState,
@@ -185,24 +186,24 @@ pub fn format_mi_temp_state<W: Write>(
     if state.battery > 0 {
         writeln!(
             writer,
-            "sensor_battery{{mac=\"{}\", name=\"{}\"}} {}",
-            addr, name, state.battery
+            "sensor_battery{{tasmota_id=\"{}\", mac=\"{}\", name=\"{}\"}} {}",
+            device.hostname, addr, name, state.battery
         )?;
     }
 
     if state.temperature > 0.0 {
         writeln!(
             writer,
-            "sensor_temperature{{mac=\"{}\", name=\"{}\"}} {}",
-            addr, name, state.temperature
+            "sensor_temperature{{tasmota_id=\"{}\", mac=\"{}\", name=\"{}\"}} {}",
+            device.hostname, addr, name, state.temperature
         )?;
     }
 
     if state.humidity > 0.0 {
         writeln!(
             writer,
-            "sensor_humidity{{mac=\"{}\", name=\"{}\"}} {}",
-            addr, name, state.humidity
+            "sensor_humidity{{tasmota_id=\"{}\", mac=\"{}\", name=\"{}\"}} {}",
+            device.hostname, addr, name, state.humidity
         )?;
     }
     Ok(())
