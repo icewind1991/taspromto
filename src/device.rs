@@ -400,7 +400,7 @@ pub fn format_pms_state<W: Write>(
     )?;
     writeln!(
         writer,
-        "pb0.3{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        "pb0_3{{tasmota_id=\"{}\", name=\"{}\"}} {}",
         device.hostname, name, state.pb0_3
     )?;
     writeln!(
