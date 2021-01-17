@@ -25,6 +25,7 @@ pub struct DeviceState {
     pub power_today: Option<f32>,
     pub co2: Option<f32>,
     pub mi_temp_devices: BTreeMap<BDAddr, MiTempState>,
+    pub pms_state: Option<PMSState>,
 }
 
 impl DeviceState {
@@ -58,6 +59,11 @@ impl DeviceState {
             .and_then(|num| f32::try_from(num).ok())
         {
             self.co2 = Some(today);
+        }
+
+        if json["PMS5003"].is_object() {
+            let pms = self.pms_state.get_or_insert(PMSState::default());
+            pms.update(&json["PMS5003"]);
         }
 
         for (key, value) in json.entries() {
@@ -163,6 +169,10 @@ pub fn format_device_state<W: Write>(
         format_mi_temp_state(&mut writer, device, *addr, mi_temp_names, state)?;
     }
 
+    if let Some(pms) = state.pms_state.as_ref() {
+        format_pms_state(&mut writer, device, state, pms)?;
+    }
+
     Ok(())
 }
 
@@ -253,4 +263,170 @@ impl Debug for BDAddr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         (self as &dyn Display).fmt(f)
     }
+}
+
+//"PMS5003":{"CF1":6,"CF2.5":8,"CF10":8,"PM1":6,"PM2.5":8,"PM10":8,"PB0.3":0,"PB0.5":0,"PB1":0,"PB2.5":0,"PB5":0,"PB10":0}
+
+#[derive(Debug, Clone, Default)]
+pub struct PMSState {
+    cf1: u16,
+    cf2_5: u16,
+    cf10: u16,
+    pm1: u16,
+    pm2_5: u16,
+    pm10: u16,
+    pb0_3: u16,
+    pb0_5: u16,
+    pb1: u16,
+    pb2_5: u16,
+    pb5: u16,
+    pb10: u16,
+}
+
+impl PMSState {
+    pub fn update(&mut self, json: &JsonValue) {
+        if let Some(val) = json["CF1"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.cf1 = val;
+        }
+        if let Some(val) = json["CF2.5"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.cf2_5 = val;
+        }
+        if let Some(val) = json["CF10"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.cf10 = val;
+        }
+        if let Some(val) = json["PM1"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pm1 = val;
+        }
+        if let Some(val) = json["PM2.5"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pm2_5 = val;
+        }
+        if let Some(val) = json["PM10"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pm10 = val;
+        }
+        if let Some(val) = json["PB0.3"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pb0_3 = val;
+        }
+        if let Some(val) = json["PB0.5"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pb0_5 = val;
+        }
+        if let Some(val) = json["PB1"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pb1 = val;
+        }
+        if let Some(val) = json["PB2.5"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pb2_5 = val;
+        }
+        if let Some(val) = json["PB5"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pb5 = val;
+        }
+        if let Some(val) = json["PB10"]
+            .as_number()
+            .and_then(|num| u16::try_from(num).ok())
+        {
+            self.pb10 = val;
+        }
+    }
+}
+
+pub fn format_pms_state<W: Write>(
+    mut writer: W,
+    device: &Device,
+    device_state: &DeviceState,
+    state: &PMSState,
+) -> std::fmt::Result {
+    let name = &device_state.name;
+
+    writeln!(
+        writer,
+        "cf1{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.cf1
+    )?;
+    writeln!(
+        writer,
+        "cf2_5{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.cf2_5
+    )?;
+    writeln!(
+        writer,
+        "cf10{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.cf10
+    )?;
+    writeln!(
+        writer,
+        "pm1{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pm1
+    )?;
+    writeln!(
+        writer,
+        "pm2_5{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pm2_5
+    )?;
+    writeln!(
+        writer,
+        "pm10{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pm10
+    )?;
+    writeln!(
+        writer,
+        "pb0.3{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pb0_3
+    )?;
+    writeln!(
+        writer,
+        "pb0_5{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pb0_5
+    )?;
+    writeln!(
+        writer,
+        "pb1{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pb1
+    )?;
+    writeln!(
+        writer,
+        "pb2_5{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pb2_5
+    )?;
+    writeln!(
+        writer,
+        "pb5{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pb5
+    )?;
+    writeln!(
+        writer,
+        "pb10{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+        device.hostname, name, state.pb10
+    )?;
+    Ok(())
 }
