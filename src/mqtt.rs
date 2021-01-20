@@ -1,7 +1,7 @@
 use async_stream::try_stream;
 use color_eyre::Result;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, Publish, QoS};
-use tokio::stream::{Stream, StreamExt};
+use tokio_stream::{Stream, StreamExt};
 
 pub async fn mqtt_stream(
     mqtt_options: MqttOptions,

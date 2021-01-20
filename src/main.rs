@@ -12,8 +12,8 @@ use dashmap::DashMap;
 use pin_utils::pin_mut;
 use rumqttc::QoS;
 use std::sync::Arc;
-use tokio::stream::StreamExt;
 use tokio::time::Duration;
+use tokio_stream::StreamExt;
 use warp::Filter;
 
 type DeviceStates = Arc<DashMap<Device, DeviceState>>;
@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
                 eprintln!("lost mqtt collection: {:#}", e);
             }
             eprintln!("reconnecting after 1s");
-            tokio::time::delay_for(Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
 
