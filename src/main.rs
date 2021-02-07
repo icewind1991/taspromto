@@ -10,10 +10,13 @@ use crate::topic::Topic;
 use color_eyre::{eyre::WrapErr, Result};
 use dashmap::DashMap;
 use pin_utils::pin_mut;
-use rumqttc::QoS;
+use rumqttc::{AsyncClient, Publish, QoS};
+use std::pin::Pin;
 use std::sync::Arc;
-use tokio::time::Duration;
-use tokio_stream::StreamExt;
+use std::time::Instant;
+use tokio::task::spawn;
+use tokio::time::{sleep, Duration};
+use tokio_stream::{Stream, StreamExt};
 use warp::Filter;
 
 type DeviceStates = Arc<DashMap<Device, DeviceState>>;
@@ -30,17 +33,16 @@ async fn main() -> Result<()> {
     })
     .expect("Error setting Ctrl-C handler");
 
-    let states = device_states.clone();
     let mi_temp_names = config.mi_temp_names.clone();
-    tokio::task::spawn(async move {
-        loop {
-            if let Err(e) = mqtt_client(&config, states.clone()).await {
-                eprintln!("lost mqtt collection: {:#}", e);
-            }
-            eprintln!("reconnecting after 1s");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    });
+
+    let mqtt_options = config.mqtt()?;
+
+    let (client, stream) = mqtt_stream(mqtt_options)
+        .await
+        .wrap_err("Failed to setup mqtt listener")?;
+
+    spawn(mqtt_loop(client.clone(), stream, device_states.clone()));
+    spawn(cleanup(client.clone(), device_states.clone()));
 
     let state = warp::any().map(move || device_states.clone());
 
@@ -64,15 +66,26 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn mqtt_client(config: &Config, device_states: DeviceStates) -> Result<()> {
-    let mqtt_options = config.mqtt()?;
-
-    let (client, stream) = mqtt_stream(mqtt_options)
-        .await
-        .wrap_err("Failed to setup mqtt listener")?;
-
+async fn mqtt_loop(
+    client: AsyncClient,
+    stream: impl Stream<Item = Result<Publish>>,
+    states: DeviceStates,
+) {
     pin_mut!(stream);
+    loop {
+        if let Err(e) = mqtt_client(client.clone(), &mut stream, states.clone()).await {
+            eprintln!("lost mqtt collection: {:#}", e);
+        }
+        eprintln!("reconnecting after 1s");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
 
+async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
+    client: AsyncClient,
+    stream: &mut Pin<&mut S>,
+    device_states: DeviceStates,
+) -> Result<()> {
     while let Some(message) = stream.next().await {
         let message = message?;
         println!(
@@ -86,7 +99,7 @@ async fn mqtt_client(config: &Config, device_states: DeviceStates) -> Result<()>
             Topic::LWT(device) => {
                 // on discovery, ask the device for it's power state and name
                 let send_client = client.clone();
-                tokio::task::spawn(async move {
+                spawn(async move {
                     if let Err(e) = send_client
                         .publish(
                             device.get_topic("cmnd", "POWER"),
@@ -130,4 +143,32 @@ async fn mqtt_client(config: &Config, device_states: DeviceStates) -> Result<()>
         }
     }
     Ok(())
+}
+
+async fn cleanup(client: AsyncClient, devices: DeviceStates) {
+    loop {
+        let ping_time = Instant::now() - Duration::from_secs(10 * 60);
+        let cleanup_time = Instant::now() - Duration::from_secs(15 * 60);
+
+        devices.retain(|device, state| {
+            if state.last_seen < cleanup_time {
+                println!("{} hasn't been seen for 15m, removing", device.hostname);
+                true
+            } else if state.last_seen < ping_time {
+                println!("{} hasn't been seen for 10m, pinging", device.hostname);
+                let send_client = client.clone();
+                let topic = device.get_topic("cmnd", "DeviceName");
+                spawn(async move {
+                    if let Err(e) = send_client.publish(topic, QoS::AtMostOnce, false, "").await {
+                        eprintln!("Failed to ping device: {:#}", e);
+                    }
+                });
+                false
+            } else {
+                false
+            }
+        });
+
+        sleep(Duration::from_secs(5 * 60)).await;
+    }
 }

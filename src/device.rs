@@ -3,6 +3,7 @@ use json::JsonValue;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter, Write};
+use std::time::Instant;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct Device {
@@ -16,7 +17,7 @@ impl Device {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DeviceState {
     pub state: Option<bool>,
     pub name: String,
@@ -26,10 +27,29 @@ pub struct DeviceState {
     pub co2: Option<f32>,
     pub mi_temp_devices: BTreeMap<BDAddr, MiTempState>,
     pub pms_state: Option<PMSState>,
+    pub last_seen: Instant,
+}
+
+impl Default for DeviceState {
+    fn default() -> Self {
+        DeviceState {
+            state: Default::default(),
+            name: Default::default(),
+            power_watts: Default::default(),
+            power_yesterday: Default::default(),
+            power_today: Default::default(),
+            co2: Default::default(),
+            mi_temp_devices: Default::default(),
+            pms_state: Default::default(),
+            last_seen: Instant::now(),
+        }
+    }
 }
 
 impl DeviceState {
     pub fn update(&mut self, json: JsonValue) {
+        self.last_seen = Instant::now();
+
         if json["DeviceName"].is_string() && !json["DeviceName"].is_empty() {
             self.name = json["DeviceName"].to_string();
         }
