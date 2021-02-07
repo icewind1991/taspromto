@@ -149,7 +149,7 @@ async fn cleanup(client: AsyncClient, devices: DeviceStates) {
         devices.retain(|device, state| {
             if state.last_seen < cleanup_time {
                 println!("{} hasn't been seen for 15m, removing", device.hostname);
-                true
+                false
             } else if state.last_seen < ping_time || state.name.is_empty() {
                 println!(
                     "{} hasn't been seen for 10m or has no name set, pinging",
@@ -162,9 +162,9 @@ async fn cleanup(client: AsyncClient, devices: DeviceStates) {
                         eprintln!("Failed to ping device: {:#}", e);
                     }
                 });
-                false
+                true
             } else {
-                false
+                true
             }
         });
 
