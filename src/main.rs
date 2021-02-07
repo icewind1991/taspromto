@@ -81,6 +81,18 @@ async fn mqtt_loop(
     }
 }
 
+async fn command(client: &AsyncClient, device: &Device, command: &str) -> Result<()> {
+    client
+        .publish(
+            device.get_topic("cmnd", command),
+            QoS::AtMostOnce,
+            false,
+            "",
+        )
+        .await?;
+    Ok(())
+}
+
 async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
     client: AsyncClient,
     stream: &mut Pin<&mut S>,
@@ -100,26 +112,10 @@ async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
                 // on discovery, ask the device for it's power state and name
                 let send_client = client.clone();
                 spawn(async move {
-                    if let Err(e) = send_client
-                        .publish(
-                            device.get_topic("cmnd", "POWER"),
-                            QoS::AtMostOnce,
-                            false,
-                            "",
-                        )
-                        .await
-                    {
+                    if let Err(e) = command(&send_client, &device, "POWER").await {
                         eprintln!("Failed to ask for power state: {:#}", e);
                     }
-                    if let Err(e) = send_client
-                        .publish(
-                            device.get_topic("cmnd", "DeviceName"),
-                            QoS::AtMostOnce,
-                            false,
-                            "",
-                        )
-                        .await
-                    {
+                    if let Err(e) = command(&send_client, &device, "DeviceName").await {
                         eprintln!("Failed to ask for device name: {:#}", e);
                     }
                 });
@@ -154,8 +150,11 @@ async fn cleanup(client: AsyncClient, devices: DeviceStates) {
             if state.last_seen < cleanup_time {
                 println!("{} hasn't been seen for 15m, removing", device.hostname);
                 true
-            } else if state.last_seen < ping_time {
-                println!("{} hasn't been seen for 10m, pinging", device.hostname);
+            } else if state.last_seen < ping_time || state.name.is_empty() {
+                println!(
+                    "{} hasn't been seen for 10m or has no name set, pinging",
+                    device.hostname
+                );
                 let send_client = client.clone();
                 let topic = device.get_topic("cmnd", "DeviceName");
                 spawn(async move {
@@ -169,6 +168,6 @@ async fn cleanup(client: AsyncClient, devices: DeviceStates) {
             }
         });
 
-        sleep(Duration::from_secs(5 * 60)).await;
+        sleep(Duration::from_secs(60)).await;
     }
 }
