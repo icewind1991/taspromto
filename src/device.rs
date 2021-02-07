@@ -143,6 +143,10 @@ pub fn format_device_state<W: Write>(
     state: &DeviceState,
     mi_temp_names: &BTreeMap<BDAddr, String>,
 ) -> std::fmt::Result {
+    if state.name.is_empty() {
+        println!("{} has no name set, skipping", device.hostname);
+        return Ok(());
+    }
     if let Some(switch_state) = state.state {
         writeln!(
             writer,
