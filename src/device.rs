@@ -74,11 +74,13 @@ impl DeviceState {
         {
             self.power_today = Some(today);
         }
-        if let Some(today) = json["MHZ19B"]["CarbonDioxide"]
+        if let Some(co2) = json["MHZ19B"]["CarbonDioxide"]
             .as_number()
             .and_then(|num| f32::try_from(num).ok())
         {
-            self.co2 = Some(today);
+            if co2 > 1.0 {
+                self.co2 = Some(co2);
+            }
         }
 
         if json["PMS5003"].is_object() {
