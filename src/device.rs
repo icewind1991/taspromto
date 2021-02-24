@@ -89,7 +89,8 @@ impl DeviceState {
         }
 
         for (key, value) in json.entries() {
-            if let Some(addr) = key.strip_prefix("MJ_HT_V1-") {
+            if let Some(addr) = key.strip_prefix("MJ_HT_V1") {
+                let addr = addr.trim_start_matches('-');
                 match BDAddr::from_mi_temp_mac_part(addr) {
                     Ok(addr) => {
                         let state = self.mi_temp_devices.entry(addr).or_default();
