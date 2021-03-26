@@ -149,6 +149,11 @@ pub fn format_device_state<W: Write>(
         println!("{} has no name set, skipping", device.hostname);
         return Ok(());
     }
+    writeln!(
+        writer,
+        "tasmota_online{{tasmota_id=\"{}\", name=\"{}\"}} 1",
+        device.hostname, state.name
+    )?;
     if let Some(switch_state) = state.state {
         writeln!(
             writer,
