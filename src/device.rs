@@ -93,6 +93,10 @@ pub struct DeviceState {
     pub power_watts: Option<f32>,
     pub power_yesterday: Option<f32>,
     pub power_today: Option<f32>,
+    pub power_total: Option<f32>,
+    pub power_total_low: Option<f32>,
+    pub power_total_high: Option<f32>,
+    pub gas_total: Option<f32>,
     pub co2: Option<f32>,
     pub pms_state: Option<PMSState>,
     pub last_seen: Instant,
@@ -106,6 +110,10 @@ impl Default for DeviceState {
             power_watts: Default::default(),
             power_yesterday: Default::default(),
             power_today: Default::default(),
+            power_total: Default::default(),
+            power_total_low: Default::default(),
+            power_total_high: Default::default(),
+            gas_total: Default::default(),
             co2: Default::default(),
             pms_state: Default::default(),
             last_seen: Instant::now(),
@@ -148,6 +156,36 @@ impl DeviceState {
             if co2 > 1.0 {
                 self.co2 = Some(co2);
             }
+        }
+        if let Some(power) = json["OBIS"]["Power"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_watts = Some(power);
+        }
+        if let Some(total) = json["OBIS"]["Total"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_total = Some(total);
+        }
+        if let Some(total) = json["OBIS"]["Total_high"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_total_high = Some(total);
+        }
+        if let Some(total) = json["OBIS"]["Total_low"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.power_total_low = Some(total);
+        }
+        if let Some(gas) = json["OBIS"]["Gas_total"]
+            .as_number()
+            .and_then(|num| f32::try_from(num).ok())
+        {
+            self.gas_total = Some(gas);
         }
 
         if json["PMS5003"].is_object() {
@@ -253,6 +291,38 @@ pub fn format_device_state<W: Write>(
             writer,
             "power_today_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
             device.hostname, state.name, power_today
+        )?;
+    }
+
+    if let Some(power_total) = state.power_total {
+        writeln!(
+            writer,
+            "power_total_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+            device.hostname, state.name, power_total
+        )?;
+    }
+
+    if let Some(power_total) = state.power_total_high {
+        writeln!(
+            writer,
+            "power_total_high_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+            device.hostname, state.name, power_total
+        )?;
+    }
+
+    if let Some(power_total) = state.power_total_low {
+        writeln!(
+            writer,
+            "power_total_low_kwh{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+            device.hostname, state.name, power_total
+        )?;
+    }
+
+    if let Some(gas_total) = state.gas_total {
+        writeln!(
+            writer,
+            "gas_total_m3{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+            device.hostname, state.name, gas_total
         )?;
     }
 
