@@ -100,6 +100,7 @@ pub struct DeviceState {
     pub co2: Option<f32>,
     pub pms_state: Option<PMSState>,
     pub last_seen: Instant,
+    pub firmware: String,
 }
 
 impl Default for DeviceState {
@@ -117,6 +118,7 @@ impl Default for DeviceState {
             co2: Default::default(),
             pms_state: Default::default(),
             last_seen: Instant::now(),
+            firmware: Default::default(),
         }
     }
 }
@@ -186,6 +188,10 @@ impl DeviceState {
             .and_then(|num| f32::try_from(num).ok())
         {
             self.gas_total = Some(gas);
+        }
+
+        if let Some(version) = json["StatusFWR"]["Version"].as_str() {
+            self.firmware = version.into();
         }
 
         if json["PMS5003"].is_object() {
@@ -336,6 +342,14 @@ pub fn format_device_state<W: Write>(
 
     if let Some(pms) = state.pms_state.as_ref() {
         format_pms_state(&mut writer, device, state, pms)?;
+    }
+
+    if !state.firmware.is_empty() {
+        writeln!(
+            writer,
+            "tasmota_version{{tasmota_id=\"{}\", name=\"{}\"}} {}",
+            device.hostname, state.name, state.firmware
+        )?;
     }
 
     Ok(())

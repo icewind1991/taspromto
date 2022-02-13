@@ -8,6 +8,7 @@ pub enum Topic {
     Sensor(Device),
     Result(Device),
     Other(String),
+    Status(Device),
 }
 
 impl From<&str> for Topic {
@@ -25,6 +26,8 @@ impl From<&str> for Topic {
                 ("stat", "POWER") => Topic::Power(device),
                 ("tele", "SENSOR") => Topic::Sensor(device),
                 ("stat", "RESULT") => Topic::Result(device),
+                ("stat", "STATUS") => Topic::Status(device),
+                ("stat", "STATUS2") => Topic::Status(device),
                 _ => Topic::Other(raw.to_string()),
             }
         } else {

@@ -11,6 +11,7 @@ pub async fn mqtt_stream(
     client.subscribe("stat/+/POWER", QoS::AtMostOnce).await?;
     client.subscribe("tele/+/SENSOR", QoS::AtMostOnce).await?;
     client.subscribe("stat/+/RESULT", QoS::AtMostOnce).await?;
+    client.subscribe("stat/+/STATUS2", QoS::AtMostOnce).await?;
 
     let stream = event_loop_to_stream(event_loop).filter_map(|event| match event {
         Ok(Event::Incoming(Packet::Publish(message))) => Some(Ok(message)),

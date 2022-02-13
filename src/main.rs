@@ -78,13 +78,13 @@ async fn mqtt_loop(
     }
 }
 
-async fn command(client: &AsyncClient, device: &Device, command: &str) -> Result<()> {
+async fn command(client: &AsyncClient, device: &Device, command: &str, body: &str) -> Result<()> {
     client
         .publish(
             device.get_topic("cmnd", command),
             QoS::AtMostOnce,
             false,
-            "",
+            body,
         )
         .await?;
     Ok(())
@@ -109,23 +109,19 @@ async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
                 // on discovery, ask the device for it's power state and name
                 let send_client = client.clone();
                 spawn(async move {
-                    if let Err(e) = command(&send_client, &device, "POWER").await {
+                    if let Err(e) = command(&send_client, &device, "POWER", "").await {
                         eprintln!("Failed to ask for power state: {:#}", e);
                     }
-                    if let Err(e) = command(&send_client, &device, "DeviceName").await {
+                    if let Err(e) = command(&send_client, &device, "DeviceName", "").await {
                         eprintln!("Failed to ask for device name: {:#}", e);
+                    }
+                    if let Err(e) = command(&send_client, &device, "Status", "2").await {
+                        eprintln!("Failed to ask for firmware state: {:#}", e);
                     }
                 });
             }
             Topic::Power(_) => {}
-            Topic::Result(device) => {
-                let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
-                if let Ok(json) = json::parse(payload) {
-                    let mut device_states = device_states.lock().unwrap();
-                    device_states.update(device, json);
-                }
-            }
-            Topic::Sensor(device) => {
+            Topic::Result(device) | Topic::Sensor(device) | Topic::Status(device) => {
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
                 if let Ok(json) = json::parse(payload) {
                     let mut device_states = device_states.lock().unwrap();
