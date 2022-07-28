@@ -5,18 +5,18 @@ authors = ["Robin Appelman <robin@icewind.nl>"]
 edition = "2018"
 
 [dependencies]
-rumqttc = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-dashmap = "4"
-json = "0.12"
-warp = "0.3"
-dotenv = "0.15"
-ctrlc = { version = "3", features = ["termination"] }
-color-eyre = "0.5"
-async-stream = "0.3"
-pin-utils = "0.1"
-hostname = "0.3"
-tokio-stream = "0.1"
+rumqttc = "0.12.0"
+tokio = { version = "1.20.1", features = ["macros", "rt-multi-thread"] }
+dashmap = "5.3.4"
+json = "0.12.4"
+warp = "0.3.2"
+dotenv = "0.15.0"
+ctrlc = { version = "3.2.2", features = ["termination"] }
+color-eyre = "0.6.2"
+async-stream = "0.3.3"
+pin-utils = "0.1.0"
+hostname = "0.3.1"
+tokio-stream = "0.1.9"
 
 [profile.release]
 lto = true
