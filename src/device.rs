@@ -195,7 +195,7 @@ impl DeviceState {
         if let Some(version) = json["StatusFWR"]["Version"].as_str() {
             self.firmware = version.into();
             if let Some(version) = version
-                .rfind(".")
+                .rfind('.')
                 .map(|index| &version[0..index])
                 .and_then(|s| s.parse().ok())
             {
