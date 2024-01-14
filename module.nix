@@ -43,7 +43,7 @@ in {
       };
 
       serviceConfig = {
-        ExecStart = "${config.package}/bin/taspromto";
+        ExecStart = "${cfg.package}/bin/taspromto";
         EnvironmentFile = cfg.mqttCredentailsFile;
         Restart = "on-failure";
         DynamicUser = true;
