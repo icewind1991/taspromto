@@ -121,7 +121,7 @@ async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
             Topic::Power(_) => {}
             Topic::Result(device) | Topic::Sensor(device) | Topic::Status(device) => {
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
-                if let Ok(json) = json::parse(payload) {
+                if let Ok(json) = jzon::parse(payload) {
                     let mut device_states = device_states.lock().unwrap();
                     device_states.update(device, json);
                 }

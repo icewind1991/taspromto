@@ -1,5 +1,5 @@
 use color_eyre::{eyre::WrapErr, Report, Result};
-use json::JsonValue;
+use jzon::JsonValue;
 use rumqttc::{AsyncClient, QoS};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;

@@ -21,17 +21,17 @@ pub struct Credentials {
 
 impl Config {
     pub fn from_env() -> Result<Self> {
-        let mqtt_host = dotenv::var("MQTT_HOSTNAME").wrap_err("MQTT_HOSTNAME not set")?;
-        let mqtt_port = dotenv::var("MQTT_PORT")
+        let mqtt_host = dotenvy::var("MQTT_HOSTNAME").wrap_err("MQTT_HOSTNAME not set")?;
+        let mqtt_port = dotenvy::var("MQTT_PORT")
             .ok()
             .and_then(|port| u16::from_str(&port).ok())
             .unwrap_or(1883);
-        let host_port = dotenv::var("PORT")
+        let host_port = dotenvy::var("PORT")
             .ok()
             .and_then(|port| u16::from_str(&port).ok())
             .unwrap_or(80);
 
-        let mi_temp_names = dotenv::var("MITEMP_NAMES").unwrap_or_default();
+        let mi_temp_names = dotenvy::var("MITEMP_NAMES").unwrap_or_default();
         let mi_temp_names = mi_temp_names
             .split(',')
             .map(|pair| {
@@ -48,9 +48,9 @@ impl Config {
             })
             .collect::<Result<BTreeMap<BDAddr, String>, Report>>()?;
 
-        let mqtt_credentials = match dotenv::var("MQTT_USERNAME") {
+        let mqtt_credentials = match dotenvy::var("MQTT_USERNAME") {
             Ok(username) => {
-                let password = dotenv::var("MQTT_PASSWORD")
+                let password = dotenvy::var("MQTT_PASSWORD")
                     .wrap_err("MQTT_USERNAME set, but MQTT_PASSWORD not set")?;
                 Some(Credentials { username, password })
             }
