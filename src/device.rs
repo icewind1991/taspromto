@@ -11,6 +11,7 @@ use tokio::task::spawn;
 pub struct DeviceStates {
     pub devices: HashMap<Device, DeviceState>,
     pub mi_temp_devices: BTreeMap<BDAddr, MiTempState>,
+    pub rf_temp_devices: BTreeMap<u8, TempState>,
 }
 
 impl DeviceStates {
@@ -36,9 +37,24 @@ impl DeviceStates {
 
         device.update(json);
     }
+    pub fn update_rf(&mut self, payload: &str) {
+        if let Some(data) = parse_rf_payload(payload) {
+            let state = self.rf_temp_devices.entry(data.channel).or_default();
+            state.humidity = data.humidity;
+            state.temperature = data.temperature;
+        } else {
+            eprintln!("invalid rf payload: {payload}")
+        }
+    }
 
     pub fn mi_temp(&self) -> impl Iterator<Item = (&BDAddr, &MiTempState)> {
         self.mi_temp_devices.iter()
+    }
+
+    pub fn rf_temp(&self) -> impl Iterator<Item = (u8, &TempState)> {
+        self.rf_temp_devices
+            .iter()
+            .map(|(channel, state)| (*channel, state))
     }
 
     pub fn retain(&mut self, cleanup_time: Instant, ping_time: Instant, client: &AsyncClient) {
@@ -406,6 +422,42 @@ pub fn format_mi_temp_state<W: Write>(
     Ok(())
 }
 
+#[derive(Debug, Default)]
+pub struct TempState {
+    temperature: f32,
+    humidity: u8,
+}
+
+pub fn format_rf_temp_state<W: Write>(
+    mut writer: W,
+    channel: u8,
+    names: &BTreeMap<u8, String>,
+    state: &TempState,
+) -> std::fmt::Result {
+    let name = if let Some(name) = names.get(&channel) {
+        name
+    } else {
+        return Ok(());
+    };
+
+    if state.temperature > 0.0 {
+        writeln!(
+            writer,
+            "sensor_temperature{{channel=\"{}\", name=\"{}\"}} {}",
+            channel, name, state.temperature
+        )?;
+    }
+
+    if state.humidity > 0 {
+        writeln!(
+            writer,
+            "sensor_humidity{{channel=\"{}\", name=\"{}\"}} {}",
+            channel, name, state.humidity
+        )?;
+    }
+    Ok(())
+}
+
 /// Stores the 6 byte address used to identify Bluetooth devices.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Ord, PartialOrd)]
@@ -616,4 +668,49 @@ pub fn format_pms_state<W: Write>(
         device.hostname, name, state.pb10
     )?;
     Ok(())
+}
+
+#[derive(Debug, PartialEq)]
+struct RfPayload<'a> {
+    name: &'a str,
+    id: u16,
+    channel: u8,
+    battery: bool,
+    temperature: f32,
+    humidity: u8,
+}
+
+fn parse_rf_payload(payload: &str) -> Option<RfPayload> {
+    let mut parts = payload.split(";").skip(2);
+    let name = parts.next()?;
+    let id = parts.next()?.strip_prefix("ID=")?.parse().ok()?;
+    let channel = parts.next()?.strip_prefix("CHN=")?.parse().ok()?;
+    let battery = parts.next()?.strip_prefix("BAT=")? == "OK";
+    let temperature = parts.next()?.strip_prefix("TEMP=")?;
+    let temperature = u32::from_str_radix(temperature, 16).ok()?;
+    let humidity = parts.next()?.strip_prefix("HUM=")?.parse().ok()?;
+
+    Some(RfPayload {
+        name,
+        id,
+        channel,
+        battery,
+        temperature: temperature as f32 / 10.0,
+        humidity,
+    })
+}
+
+#[test]
+fn test_rf_payload() {
+    assert_eq!(
+        RfPayload {
+            name: "Bresser-3CH",
+            id: 49,
+            channel: 1,
+            battery: true,
+            temperature: 16.1,
+            humidity: 58
+        },
+        parse_rf_payload("20;1E;Bresser-3CH;ID=49;CHN=0001;BAT=OK;TEMP=00a1;HUM=58;").unwrap()
+    )
 }

@@ -4,7 +4,9 @@ mod mqtt;
 mod topic;
 
 use crate::config::Config;
-use crate::device::{format_device_state, format_mi_temp_state, Device, DeviceStates};
+use crate::device::{
+    format_device_state, format_mi_temp_state, format_rf_temp_state, Device, DeviceStates,
+};
 use crate::mqtt::mqtt_stream;
 use crate::topic::Topic;
 use color_eyre::{eyre::WrapErr, Result};
@@ -56,6 +58,7 @@ async fn main() -> Result<()> {
 async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
     let host_port = config.host_port;
     let mi_temp_names = config.mi_temp_names.clone();
+    let rf_temp_names = config.rf_temp_names.clone();
 
     let state = warp::any().map(move || device_states.clone());
 
@@ -69,6 +72,9 @@ async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
             }
             for (addr, state) in state.mi_temp() {
                 format_mi_temp_state(&mut response, *addr, &mi_temp_names, state).unwrap()
+            }
+            for (channel, state) in state.rf_temp() {
+                format_rf_temp_state(&mut response, channel, &rf_temp_names, state).unwrap()
             }
             response
         });
@@ -125,6 +131,11 @@ async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
                     let mut device_states = device_states.lock().unwrap();
                     device_states.update(device, json);
                 }
+            }
+            Topic::Msg(_device) => {
+                let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
+                let mut device_states = device_states.lock().unwrap();
+                device_states.update_rf(payload);
             }
             _ => {}
         }

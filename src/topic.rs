@@ -9,10 +9,18 @@ pub enum Topic {
     Result(Device),
     Other(String),
     Status(Device),
+    Msg(Device),
 }
 
 impl From<&str> for Topic {
     fn from(raw: &str) -> Self {
+        if let Some(rf_name) = raw.strip_suffix("/msg") {
+            let device = Device {
+                hostname: rf_name.to_string(),
+            };
+            return Topic::Msg(device);
+        }
+
         let mut parts = raw.split('/');
         if let (Some(prefix), Some(hostname), Some(cmd)) =
             (parts.next(), parts.next(), parts.next())

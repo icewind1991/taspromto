@@ -11,6 +11,7 @@ pub struct Config {
     pub mqtt_port: u16,
     pub host_port: u16,
     pub mi_temp_names: BTreeMap<BDAddr, String>,
+    pub rf_temp_names: BTreeMap<u8, String>,
     pub mqtt_credentials: Option<Credentials>,
 }
 
@@ -48,6 +49,20 @@ impl Config {
             })
             .collect::<Result<BTreeMap<BDAddr, String>, Report>>()?;
 
+        let rf_temp_names = dotenvy::var("RF_TEMP_NAMES").unwrap_or_default();
+        let rf_temp_names = rf_temp_names
+            .split(',')
+            .map(|pair| {
+                let mut parts = pair.split('=');
+                if let (Some(mac), Some(name)) = (parts.next().map(u8::from_str), parts.next()) {
+                    let channel = mac.wrap_err("Invalid RF_TEMP_NAMES")?;
+                    Ok((channel, name.to_string()))
+                } else {
+                    Err(Report::msg("Invalid RF_TEMP_NAMES"))
+                }
+            })
+            .collect::<Result<BTreeMap<u8, String>, Report>>()?;
+
         let mqtt_credentials = match dotenvy::var("MQTT_USERNAME") {
             Ok(username) => {
                 let password = dotenvy::var("MQTT_PASSWORD")
@@ -62,6 +77,7 @@ impl Config {
             mqtt_port,
             host_port,
             mi_temp_names,
+            rf_temp_names,
             mqtt_credentials,
         })
     }

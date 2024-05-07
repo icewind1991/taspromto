@@ -16,6 +16,12 @@ in {
       description = "Names for mitemp sensors";
     };
 
+    rfChannelNames = mkOption {
+      type = types.attrs;
+      default = {};
+      description = "Names for 433mhz temperature sensors";
+    };
+
     port = mkOption {
       type = types.int;
       default = 3030;
@@ -40,6 +46,7 @@ in {
       environment = {
         PORT = toString cfg.port;
         MITEMP_NAMES = concatStringsSep "," (map (k: k + "=" + cfg.mitempNames."${k}") (attrNames cfg.mitempNames));
+        RF_TEMP_NAMES = concatStringsSep "," (map (k: k + "=" + cfg.rfChannelNames."${k}") (attrNames cfg.rfChannelNames));
       };
 
       serviceConfig = {
