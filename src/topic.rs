@@ -1,4 +1,4 @@
-use crate::device::Device;
+use crate::device::{Device, DsmrMessageType};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Topic {
@@ -10,6 +10,42 @@ pub enum Topic {
     Other(String),
     Status(Device),
     Msg(Device),
+    Water(Device),
+    Gas(Device),
+    Energy1(Device),
+    Energy2(Device),
+    DsmrPower(Device),
+}
+
+impl Topic {
+    pub fn dsmr_type(&self) -> Option<DsmrMessageType> {
+        match self {
+            Topic::Water(_) => Some(DsmrMessageType::Water),
+            Topic::Gas(_) => Some(DsmrMessageType::Gas),
+            Topic::Energy1(_) => Some(DsmrMessageType::Energy1),
+            Topic::Energy2(_) => Some(DsmrMessageType::Energy2),
+            Topic::DsmrPower(_) => Some(DsmrMessageType::Power),
+            _ => None,
+        }
+    }
+
+    pub fn into_device(self) -> Device {
+        match self {
+            Topic::Lwt(device) => device,
+            Topic::Power(device) => device,
+            Topic::State(device) => device,
+            Topic::Sensor(device) => device,
+            Topic::Result(device) => device,
+            Topic::Other(device) => Device { hostname: device },
+            Topic::Status(device) => device,
+            Topic::Msg(device) => device,
+            Topic::Water(device) => device,
+            Topic::Gas(device) => device,
+            Topic::Energy1(device) => device,
+            Topic::Energy2(device) => device,
+            Topic::DsmrPower(device) => device,
+        }
+    }
 }
 
 impl From<&str> for Topic {
@@ -19,6 +55,36 @@ impl From<&str> for Topic {
                 hostname: rf_name.to_string(),
             };
             return Topic::Msg(device);
+        }
+        if let Some(name) = raw.strip_suffix("/water") {
+            let device = Device {
+                hostname: name.to_string(),
+            };
+            return Topic::Water(device);
+        }
+        if let Some(name) = raw.strip_suffix("/gas_delivered") {
+            let device = Device {
+                hostname: name.to_string(),
+            };
+            return Topic::Gas(device);
+        }
+        if let Some(name) = raw.strip_suffix("/energy_delivered_tariff1") {
+            let device = Device {
+                hostname: name.to_string(),
+            };
+            return Topic::Energy1(device);
+        }
+        if let Some(name) = raw.strip_suffix("/energy_delivered_tariff2") {
+            let device = Device {
+                hostname: name.to_string(),
+            };
+            return Topic::Energy2(device);
+        }
+        if let Some(name) = raw.strip_suffix("/power_delivered_l1") {
+            let device = Device {
+                hostname: name.to_string(),
+            };
+            return Topic::DsmrPower(device);
         }
 
         let mut parts = raw.split('/');

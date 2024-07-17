@@ -10,6 +10,7 @@ use tokio::task::spawn;
 #[derive(Default)]
 pub struct DeviceStates {
     pub devices: HashMap<Device, DeviceState>,
+    pub dsmr_devices: HashMap<Device, DsmrState>,
     pub mi_temp_devices: BTreeMap<BDAddr, MiTempState>,
     pub rf_temp_devices: BTreeMap<u8, TempState>,
 }
@@ -17,6 +18,10 @@ pub struct DeviceStates {
 impl DeviceStates {
     pub fn devices(&self) -> impl Iterator<Item = (&Device, &DeviceState)> {
         self.devices.iter()
+    }
+
+    pub fn dsmr_devices(&self) -> impl Iterator<Item = (&Device, &DsmrState)> {
+        self.dsmr_devices.iter()
     }
 
     pub fn update(&mut self, device: Device, json: JsonValue) {
@@ -37,6 +42,21 @@ impl DeviceStates {
 
         device.update(json);
     }
+
+    pub fn update_dsmr(&mut self, device: Device, ty: DsmrMessageType, payload: &str) {
+        if let Ok(value) = payload.parse() {
+            let state = self.dsmr_devices.entry(device).or_default();
+            match ty {
+                DsmrMessageType::Water => state.water_total = Some(value),
+                DsmrMessageType::Gas => state.gas_total = Some(value),
+                DsmrMessageType::Energy1 => state.power_total_tariff_1 = Some(value),
+                DsmrMessageType::Energy2 => state.power_total_tariff_2 = Some(value),
+                DsmrMessageType::Power => state.power = Some(value),
+            }
+            state.last_seen = Instant::now();
+        }
+    }
+
     pub fn update_rf(&mut self, payload: &str) {
         if let Some(data) = parse_rf_payload(payload) {
             let state = self.rf_temp_devices.entry(data.channel).or_default();
@@ -137,6 +157,37 @@ impl Default for DeviceState {
             last_seen: Instant::now(),
             firmware: Default::default(),
             version: 0.0,
+        }
+    }
+}
+
+pub enum DsmrMessageType {
+    Water,
+    Gas,
+    Energy1,
+    Energy2,
+    Power,
+}
+
+#[derive(Debug)]
+pub struct DsmrState {
+    pub power: Option<f32>,
+    pub power_total_tariff_1: Option<f32>,
+    pub power_total_tariff_2: Option<f32>,
+    pub gas_total: Option<f32>,
+    pub water_total: Option<f32>,
+    pub last_seen: Instant,
+}
+
+impl Default for DsmrState {
+    fn default() -> Self {
+        DsmrState {
+            power: None,
+            power_total_tariff_1: None,
+            power_total_tariff_2: None,
+            gas_total: None,
+            water_total: None,
+            last_seen: Instant::now(),
         }
     }
 }
@@ -454,6 +505,56 @@ pub fn format_rf_temp_state<W: Write>(
             "sensor_humidity{{channel=\"{}\", name=\"{}\"}} {}",
             channel, name, state.humidity
         )?;
+    }
+    Ok(())
+}
+
+pub fn format_dsmr_state<W: Write>(
+    mut writer: W,
+    device: &str,
+    state: &DsmrState,
+) -> std::fmt::Result {
+    let power_total = state.power_total_tariff_1.unwrap_or_default()
+        + state.power_total_tariff_2.unwrap_or_default();
+    if power_total > 0.0 {
+        writeln!(
+            writer,
+            "power_total_kwh{{name=\"{}\"}} {}",
+            device, power_total
+        )?;
+    }
+
+    if let Some(power) = state.power_total_tariff_1 {
+        writeln!(
+            writer,
+            "power_total_low_kwh{{name=\"{}\"}} {}",
+            device, power
+        )?;
+    }
+
+    if let Some(power) = state.power_total_tariff_2 {
+        writeln!(
+            writer,
+            "power_total_high_kwh{{name=\"{}\"}} {}",
+            device, power
+        )?;
+    }
+
+    if let Some(power) = state.power {
+        writeln!(
+            writer,
+            "power_watts{{name=\"{}\"}} {}",
+            device,
+            power * 1000.0
+        )?;
+    }
+
+    if let Some(gas) = state.gas_total {
+        writeln!(writer, "gas_total_m3{{name=\"{}\"}} {}", device, gas)?;
+    }
+
+    if let Some(water) = state.water_total {
+        writeln!(writer, "water_total_m3{{name=\"{}\"}} {}", device, water)?;
     }
     Ok(())
 }

@@ -5,7 +5,8 @@ mod topic;
 
 use crate::config::Config;
 use crate::device::{
-    format_device_state, format_mi_temp_state, format_rf_temp_state, Device, DeviceStates,
+    format_device_state, format_dsmr_state, format_mi_temp_state, format_rf_temp_state, Device,
+    DeviceStates,
 };
 use crate::mqtt::mqtt_stream;
 use crate::topic::Topic;
@@ -69,6 +70,9 @@ async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
             let mut response = String::new();
             for (device, state) in state.devices() {
                 format_device_state(&mut response, device, state).unwrap();
+            }
+            for (device, state) in state.dsmr_devices() {
+                format_dsmr_state(&mut response, device.hostname.as_str(), state).unwrap();
             }
             for (addr, state) in state.mi_temp() {
                 format_mi_temp_state(&mut response, *addr, &mi_temp_names, state).unwrap()
@@ -136,6 +140,17 @@ async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
                 let mut device_states = device_states.lock().unwrap();
                 device_states.update_rf(payload);
+            }
+            topic @ (Topic::Water(_)
+            | Topic::Gas(_)
+            | Topic::Energy1(_)
+            | Topic::Energy2(_)
+            | Topic::DsmrPower(_)) => {
+                let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
+                let mut device_states = device_states.lock().unwrap();
+                if let Some(ty) = topic.dsmr_type() {
+                    device_states.update_dsmr(topic.into_device(), ty, payload);
+                }
             }
             _ => {}
         }
