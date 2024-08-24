@@ -78,7 +78,7 @@ async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
                 format_mi_temp_state(&mut response, *addr, &mi_temp_names, state).unwrap()
             }
             for (channel, state) in state.rf_temp() {
-                format_rf_temp_state(&mut response, channel, &rf_temp_names, state).unwrap()
+                format_rf_temp_state(&mut response, &channel, &rf_temp_names, state).unwrap()
             }
             response
         });
@@ -140,6 +140,11 @@ async fn mqtt_client<S: Stream<Item = Result<Publish>>>(
                 let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
                 let mut device_states = device_states.lock().unwrap();
                 device_states.update_rf(payload);
+            }
+            Topic::Rtl(device, field) => {
+                let payload = std::str::from_utf8(message.payload.as_ref()).unwrap_or_default();
+                let mut device_states = device_states.lock().unwrap();
+                device_states.update_rtl(&device.hostname, &field, payload);
             }
             topic @ (Topic::Water(_)
             | Topic::Gas(_)

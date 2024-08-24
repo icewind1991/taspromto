@@ -10,6 +10,7 @@ pub async fn mqtt_stream(
     client.subscribe("stat/+/+", QoS::AtMostOnce).await?;
     client.subscribe("tele/+/+", QoS::AtMostOnce).await?;
     client.subscribe("rflink/msg", QoS::AtMostOnce).await?;
+    client.subscribe("rtl_433/#", QoS::AtMostOnce).await?;
     client.subscribe("+/water", QoS::AtMostOnce).await?;
     client.subscribe("+/gas_delivered", QoS::AtMostOnce).await?;
     client

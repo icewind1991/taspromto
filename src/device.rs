@@ -1,9 +1,12 @@
 use color_eyre::{eyre::WrapErr, Report, Result};
 use jzon::JsonValue;
 use rumqttc::{AsyncClient, QoS};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter, Write};
+use std::num::ParseIntError;
+use std::str::FromStr;
 use std::time::Instant;
 use tokio::task::spawn;
 
@@ -12,7 +15,8 @@ pub struct DeviceStates {
     pub devices: HashMap<Device, DeviceState>,
     pub dsmr_devices: HashMap<Device, DsmrState>,
     pub mi_temp_devices: BTreeMap<BDAddr, MiTempState>,
-    pub rf_temp_devices: BTreeMap<u8, TempState>,
+    pub rf_temp_devices: HashMap<RfDeviceId<'static>, TempState>,
+    active_rf_temp_id: RfDeviceId<'static>,
 }
 
 impl DeviceStates {
@@ -59,7 +63,10 @@ impl DeviceStates {
 
     pub fn update_rf(&mut self, payload: &str) {
         if let Some(data) = parse_rf_payload(payload) {
-            let state = self.rf_temp_devices.entry(data.channel).or_default();
+            let state = self
+                .rf_temp_devices
+                .entry(data.device_id().to_owned())
+                .or_default();
             state.humidity = data.humidity;
             state.temperature = data.temperature;
         } else {
@@ -67,14 +74,42 @@ impl DeviceStates {
         }
     }
 
+    pub fn update_rtl(&mut self, device: &str, field: &str, payload: &str) {
+        if self.active_rf_temp_id.name != device {
+            self.active_rf_temp_id = RfDeviceId::default();
+            self.active_rf_temp_id.name = device.to_string().into();
+        }
+        match field {
+            "id" => self.active_rf_temp_id.id = payload.parse().unwrap_or_default(),
+            "channel" => self.active_rf_temp_id.channel = payload.parse().unwrap_or_default(),
+            "temperature_F" | "humidity" => self.update_active_rtl(field, payload),
+            _ => {}
+        }
+    }
+
+    fn update_active_rtl(&mut self, field: &str, payload: &str) {
+        let state = self
+            .rf_temp_devices
+            .entry(self.active_rf_temp_id.to_owned())
+            .or_default();
+        match field {
+            "temperature_F" => {
+                state.temperature = payload
+                    .parse()
+                    .map(|temp_f: f32| (temp_f - 32.0) * 5.0 / 9.0)
+                    .unwrap_or_default()
+            }
+            "humidity" => state.humidity = payload.parse().unwrap_or_default(),
+            _ => {}
+        }
+    }
+
     pub fn mi_temp(&self) -> impl Iterator<Item = (&BDAddr, &MiTempState)> {
         self.mi_temp_devices.iter()
     }
 
-    pub fn rf_temp(&self) -> impl Iterator<Item = (u8, &TempState)> {
-        self.rf_temp_devices
-            .iter()
-            .map(|(channel, state)| (*channel, state))
+    pub fn rf_temp(&self) -> impl Iterator<Item = (&RfDeviceId<'static>, &TempState)> {
+        self.rf_temp_devices.iter()
     }
 
     pub fn retain(&mut self, cleanup_time: Instant, ping_time: Instant, client: &AsyncClient) {
@@ -481,11 +516,11 @@ pub struct TempState {
 
 pub fn format_rf_temp_state<W: Write>(
     mut writer: W,
-    channel: u8,
-    names: &BTreeMap<u8, String>,
+    channel: &RfDeviceId,
+    names: &HashMap<RfDeviceId, String>,
     state: &TempState,
 ) -> std::fmt::Result {
-    let name = if let Some(name) = names.get(&channel) {
+    let name = if let Some(name) = names.get(channel) {
         name
     } else {
         return Ok(());
@@ -494,16 +529,16 @@ pub fn format_rf_temp_state<W: Write>(
     if state.temperature > 0.0 {
         writeln!(
             writer,
-            "sensor_temperature{{channel=\"{}\", name=\"{}\"}} {}",
-            channel, name, state.temperature
+            "sensor_temperature{{model=\"{}\", id=\"{}\", channel=\"{}\", name=\"{}\"}} {}",
+            channel.name, channel.id, channel.channel, name, state.temperature
         )?;
     }
 
     if state.humidity > 0 {
         writeln!(
             writer,
-            "sensor_humidity{{channel=\"{}\", name=\"{}\"}} {}",
-            channel, name, state.humidity
+            "sensor_humidity{{model=\"{}\", id=\"{}\", channel=\"{}\", name=\"{}\"}} {}",
+            channel.name, channel.id, channel.channel, name, state.humidity
         )?;
     }
     Ok(())
@@ -779,6 +814,49 @@ struct RfPayload<'a> {
     battery: bool,
     temperature: f32,
     humidity: u8,
+}
+
+impl<'a> RfPayload<'a> {
+    pub fn device_id(&self) -> RfDeviceId<'a> {
+        RfDeviceId {
+            name: Cow::Borrowed(self.name),
+            id: self.id,
+            channel: self.channel,
+        }
+    }
+}
+
+#[derive(Hash, PartialEq, Eq, Debug, Clone, Default)]
+pub struct RfDeviceId<'a> {
+    name: Cow<'a, str>,
+    id: u16,
+    channel: u8,
+}
+
+impl RfDeviceId<'_> {
+    pub fn to_owned(&self) -> RfDeviceId<'static> {
+        RfDeviceId {
+            name: Cow::Owned(self.name.to_string()),
+            id: self.id,
+            channel: self.channel,
+        }
+    }
+}
+
+impl FromStr for RfDeviceId<'static> {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(3, ':');
+        let name = parts.next().unwrap_or_default();
+        let id = parts.next().unwrap_or_default().parse()?;
+        let channel = parts.next().unwrap_or_default().parse()?;
+        Ok(RfDeviceId {
+            name: name.to_string().into(),
+            id,
+            channel,
+        })
+    }
 }
 
 fn parse_rf_payload(payload: &str) -> Option<RfPayload> {

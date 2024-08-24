@@ -1,7 +1,7 @@
-use crate::device::BDAddr;
+use crate::device::{BDAddr, RfDeviceId};
 use color_eyre::{eyre::WrapErr, Report, Result};
 use rumqttc::MqttOptions;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ pub struct Config {
     pub mqtt_port: u16,
     pub host_port: u16,
     pub mi_temp_names: BTreeMap<BDAddr, String>,
-    pub rf_temp_names: BTreeMap<u8, String>,
+    pub rf_temp_names: HashMap<RfDeviceId<'static>, String>,
     pub mqtt_credentials: Option<Credentials>,
 }
 
@@ -54,14 +54,15 @@ impl Config {
             .split(',')
             .map(|pair| {
                 let mut parts = pair.split('=');
-                if let (Some(mac), Some(name)) = (parts.next().map(u8::from_str), parts.next()) {
-                    let channel = mac.wrap_err("Invalid RF_TEMP_NAMES")?;
-                    Ok((channel, name.to_string()))
+                if let (Some(channel), Some(name)) = (parts.next(), parts.next()) {
+                    let device_id =
+                        RfDeviceId::from_str(channel).wrap_err("Invalid RF_TEMP_NAMES")?;
+                    Ok((device_id, name.to_string()))
                 } else {
                     Err(Report::msg("Invalid RF_TEMP_NAMES"))
                 }
             })
-            .collect::<Result<BTreeMap<u8, String>, Report>>()?;
+            .collect::<Result<HashMap<_, _>, Report>>()?;
 
         let mqtt_credentials = match dotenvy::var("MQTT_USERNAME") {
             Ok(username) => {

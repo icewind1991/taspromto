@@ -15,6 +15,7 @@ pub enum Topic {
     Energy1(Device),
     Energy2(Device),
     DsmrPower(Device),
+    Rtl(Device, String),
 }
 
 impl Topic {
@@ -44,6 +45,7 @@ impl Topic {
             Topic::Energy1(device) => device,
             Topic::Energy2(device) => device,
             Topic::DsmrPower(device) => device,
+            Topic::Rtl(device, _) => device,
         }
     }
 }
@@ -55,6 +57,15 @@ impl From<&str> for Topic {
                 hostname: rf_name.to_string(),
             };
             return Topic::Msg(device);
+        }
+        if let Some((device, topic)) = raw
+            .strip_prefix("rtl_433/")
+            .and_then(|topic| topic.split_once('/'))
+        {
+            let device = Device {
+                hostname: device.to_string(),
+            };
+            return Topic::Rtl(device, topic.into());
         }
         if let Some(name) = raw.strip_suffix("/water") {
             let device = Device {
