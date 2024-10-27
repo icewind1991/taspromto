@@ -1,6 +1,6 @@
-{
-  dockerTools,
-  taspromto,
+{ dockerTools
+, taspromto
+,
 }:
 dockerTools.buildLayeredImage {
   name = "icewind1991/taspromto";
@@ -11,9 +11,9 @@ dockerTools.buildLayeredImage {
     dockerTools.caCertificates
   ];
   config = {
-    Cmd = ["taspromto"];
+    Cmd = [ "taspromto" ];
     ExposedPorts = {
-      "80/tcp" = {};
+      "80/tcp" = { };
     };
   };
 }

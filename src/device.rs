@@ -237,60 +237,33 @@ impl DeviceState {
         if json["POWER"].is_string() && !json["POWER"].is_empty() {
             self.state = Some(json["POWER"] == "ON");
         }
-        if let Some(power) = json["ENERGY"]["Power"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(power) = json["ENERGY"]["Power"].as_number().map(f32::from) {
             self.power_watts = Some(power);
         }
-        if let Some(yesterday) = json["ENERGY"]["Yesterday"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(yesterday) = json["ENERGY"]["Yesterday"].as_number().map(f32::from) {
             self.power_yesterday = Some(yesterday);
         }
-        if let Some(today) = json["ENERGY"]["Today"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(today) = json["ENERGY"]["Today"].as_number().map(f32::from) {
             self.power_today = Some(today);
         }
-        if let Some(co2) = json["MHZ19B"]["CarbonDioxide"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(co2) = json["MHZ19B"]["CarbonDioxide"].as_number().map(f32::from) {
             if co2 > 1.0 {
                 self.co2 = Some(co2);
             }
         }
-        if let Some(power) = json["OBIS"]["Power"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(power) = json["OBIS"]["Power"].as_number().map(f32::from) {
             self.power_watts = Some(power);
         }
-        if let Some(total) = json["OBIS"]["Total"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(total) = json["OBIS"]["Total"].as_number().map(f32::from) {
             self.power_total = Some(total);
         }
-        if let Some(total) = json["OBIS"]["Total_high"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(total) = json["OBIS"]["Total_high"].as_number().map(f32::from) {
             self.power_total_high = Some(total);
         }
-        if let Some(total) = json["OBIS"]["Total_low"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(total) = json["OBIS"]["Total_low"].as_number().map(f32::from) {
             self.power_total_low = Some(total);
         }
-        if let Some(gas) = json["OBIS"]["Gas_total"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(gas) = json["OBIS"]["Gas_total"].as_number().map(f32::from) {
             self.gas_total = Some(gas);
         }
 
@@ -336,16 +309,10 @@ impl Default for MiTempState {
 impl MiTempState {
     pub fn update(&mut self, json: &JsonValue) {
         self.last_seen = Instant::now();
-        if let Some(temperature) = json["Temperature"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(temperature) = json["Temperature"].as_number().map(f32::from) {
             self.temperature = temperature;
         }
-        if let Some(humidity) = json["Humidity"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(humidity) = json["Humidity"].as_number().map(f32::from) {
             self.humidity = humidity;
         }
         if let Some(battery) = json["Battery"]
@@ -354,10 +321,7 @@ impl MiTempState {
         {
             self.battery = battery;
         }
-        if let Some(dew_point) = json["DewPoint"]
-            .as_number()
-            .and_then(|num| f32::try_from(num).ok())
-        {
+        if let Some(dew_point) = json["DewPoint"].as_number().map(f32::from) {
             self.dew_point = dew_point;
         }
     }
@@ -595,7 +559,6 @@ pub fn format_dsmr_state<W: Write>(
 }
 
 /// Stores the 6 byte address used to identify Bluetooth devices.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Ord, PartialOrd)]
 #[repr(C)]
 pub struct BDAddr {

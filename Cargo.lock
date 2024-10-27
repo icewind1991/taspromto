@@ -1038,6 +1038,7 @@ dependencies = [
  "jzon",
  "pin-utils",
  "rumqttc",
+ "serde",
  "tokio",
  "tokio-stream",
  "warp",

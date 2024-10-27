@@ -1,3 +1,3 @@
 final: prev: {
-  taspromto = final.callPackage ./package.nix {};
+  taspromto = final.callPackage ./package.nix { };
 }

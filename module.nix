@@ -1,24 +1,24 @@
-{
-  config,
-  lib,
-  pkgs,
-  ...
+{ config
+, lib
+, pkgs
+, ...
 }:
 with lib; let
   cfg = config.services.taspromto;
-in {
+in
+{
   options.services.taspromto = {
     enable = mkEnableOption "taspromto";
 
     mitempNames = mkOption {
       type = types.attrs;
-      default = {};
+      default = { };
       description = "Names for mitemp sensors";
     };
 
     rfChannelNames = mkOption {
       type = types.attrs;
-      default = {};
+      default = { };
       description = "Names for 433mhz temperature sensors";
     };
 
@@ -42,7 +42,7 @@ in {
 
   config = mkIf cfg.enable {
     systemd.services."taspromto" = {
-      wantedBy = ["multi-user.target"];
+      wantedBy = [ "multi-user.target" ];
       environment = {
         PORT = toString cfg.port;
         MITEMP_NAMES = concatStringsSep "," (map (k: k + "=" + cfg.mitempNames."${k}") (attrNames cfg.mitempNames));
@@ -73,9 +73,9 @@ in {
         RestrictAddressFamilies = "AF_INET AF_INET6";
         RestrictRealtime = true;
         ProtectProc = "noaccess";
-        SystemCallFilter = ["@system-service" "~@resources" "~@privileged"];
+        SystemCallFilter = [ "@system-service" "~@resources" "~@privileged" ];
         IPAddressDeny = "any";
-        IPAddressAllow = ["localhost"];
+        IPAddressAllow = [ "localhost" ];
         PrivateUsers = true;
         ProcSubset = "pid";
       };

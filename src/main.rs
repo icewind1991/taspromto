@@ -78,7 +78,7 @@ async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
                 format_mi_temp_state(&mut response, *addr, &mi_temp_names, state).unwrap()
             }
             for (channel, state) in state.rf_temp() {
-                format_rf_temp_state(&mut response, &channel, &rf_temp_names, state).unwrap()
+                format_rf_temp_state(&mut response, channel, &rf_temp_names, state).unwrap()
             }
             response
         });
