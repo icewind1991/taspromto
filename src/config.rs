@@ -25,7 +25,7 @@ pub enum ListenConfig {
         port: u16,
     },
     Unix {
-        path: String,
+        socket: String,
     },
 }
 

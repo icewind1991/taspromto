@@ -5,6 +5,25 @@
 }:
 with lib; let
   cfg = config.services.taspromto;
+  format = pkgs.formats.toml { };
+  configFile = format.generate "taspromto-config.toml" {
+    listen = {
+      inherit (cfg) port;
+    };
+    names = {
+      mitemp = cfg.mitempNames;
+      rftemp = cfg.rfChannelNames;
+    };
+    mqtt = {
+      inherit (cfg.mqtt) hostname port;
+      password_file = "$CREDENTIALS_DIRECTORY/mqtt_password";
+    } // (
+      optionalAttrs (cfg.mqtt.passwordFile != null) {
+        inherit (cfg.mqtt) username;
+        password_file = "$CREDENTIALS_DIRECTORY/mqtt_password";
+      }
+    );
+  };
 in
 {
   options.services.taspromto = {
@@ -23,19 +42,40 @@ in
     };
 
     port = mkOption {
-      type = types.int;
+      type = types.port;
       default = 3030;
       description = "port to listen to";
     };
 
-    mqttCredentailsFile = mkOption {
-      type = types.str;
-      description = "path containing MQTT_HOSTNAME, MQTT_USERNAME and MQTT_PASSWORD environment variables";
+    mqtt = mkOption {
+      type = types.submodule {
+        options = {
+          hostname = mkOption {
+            type = types.str;
+            description = "Hostname of the MQTT server";
+          };
+          port = mkOption {
+            type = types.port;
+            default = 1883;
+            description = "Port of the MQTT server";
+          };
+          username = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Username for the MQTT server";
+          };
+          passwordFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "File containing the password for the MQTT server";
+          };
+        };
+      };
     };
 
     package = mkOption {
       type = types.package;
-      defaultText = literalExpression "pkgs.shelve";
+      defaultText = literalExpression "pkgs.taspromto";
       description = "package to use";
     };
   };
@@ -43,15 +83,14 @@ in
   config = mkIf cfg.enable {
     systemd.services."taspromto" = {
       wantedBy = [ "multi-user.target" ];
-      environment = {
-        PORT = toString cfg.port;
-        MITEMP_NAMES = concatStringsSep "," (map (k: k + "=" + cfg.mitempNames."${k}") (attrNames cfg.mitempNames));
-        RF_TEMP_NAMES = concatStringsSep "," (map (k: k + "=" + cfg.rfChannelNames."${k}") (attrNames cfg.rfChannelNames));
-      };
 
       serviceConfig = {
-        ExecStart = "${cfg.package}/bin/taspromto";
-        EnvironmentFile = cfg.mqttCredentailsFile;
+        LoadCredential = optional (cfg.mqtt.passwordFile != null) [
+          "mqtt_password:${cfg.mqtt.passwordFile}"
+        ];
+
+        ExecStart = "${cfg.package}/bin/taspromto ${configFile}";
+
         Restart = "on-failure";
         DynamicUser = true;
         PrivateTmp = true;
@@ -70,12 +109,13 @@ in
         ProtectHostname = true;
         LockPersonality = true;
         ProtectKernelTunables = true;
-        RestrictAddressFamilies = "AF_INET AF_INET6";
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+        RuntimeDirectory = "taspromto";
         RestrictRealtime = true;
         ProtectProc = "noaccess";
         SystemCallFilter = [ "@system-service" "~@resources" "~@privileged" ];
         IPAddressDeny = "any";
-        IPAddressAllow = [ "localhost" ];
+        IPAddressAllow = [ "localhost" cfg.mqtt.hostname ];
         PrivateUsers = true;
         ProcSubset = "pid";
       };

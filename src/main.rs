@@ -101,7 +101,7 @@ async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
         ListenConfig::Ip { address, port } => {
             warp::serve(metrics).run((address, port)).await;
         }
-        ListenConfig::Unix { path } => {
+        ListenConfig::Unix { socket: path } => {
             let listener = UnixListener::bind(path).unwrap();
             let incoming = UnixListenerStream::new(listener);
             warp::serve(metrics).run_incoming(incoming).await;
