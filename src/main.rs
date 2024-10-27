@@ -3,13 +3,14 @@ mod device;
 mod mqtt;
 mod topic;
 
-use crate::config::Config;
+use crate::config::{Config, ListenConfig};
 use crate::device::{
     format_device_state, format_dsmr_state, format_mi_temp_state, format_rf_temp_state, Device,
     DeviceStates,
 };
 use crate::mqtt::mqtt_stream;
 use crate::topic::Topic;
+use clap::Parser;
 use color_eyre::{eyre::WrapErr, Result};
 
 use pin_utils::pin_mut;
@@ -18,14 +19,28 @@ use rumqttc::{AsyncClient, Publish, QoS};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use tokio::net::UnixListener;
 use tokio::task::spawn;
 use tokio::time::{sleep, Duration};
+use tokio_stream::wrappers::UnixListenerStream;
 use tokio_stream::{Stream, StreamExt};
 use warp::Filter;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Config file to use, if omitted the config will be loaded from environment variables
+    config: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config = Config::from_env()?;
+    let args = Args::parse();
+
+    let config = match args.config {
+        Some(path) => Config::from_file(path)?,
+        _ => Config::from_env()?,
+    };
     let mqtt_options = config.mqtt()?;
 
     let device_states = <Arc<Mutex<DeviceStates>>>::default();
@@ -57,9 +72,8 @@ async fn main() -> Result<()> {
 }
 
 async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
-    let host_port = config.host_port;
-    let mi_temp_names = config.mi_temp_names.clone();
-    let rf_temp_names = config.rf_temp_names.clone();
+    let mi_temp_names = config.names.mi_temp.clone();
+    let rf_temp_names = config.names.rf_temp.clone();
 
     let state = warp::any().map(move || device_states.clone());
 
@@ -83,7 +97,16 @@ async fn serve(device_states: Arc<Mutex<DeviceStates>>, config: Config) {
             response
         });
 
-    warp::serve(metrics).run(([0, 0, 0, 0], host_port)).await;
+    match config.listen {
+        ListenConfig::Ip { address, port } => {
+            warp::serve(metrics).run((address, port)).await;
+        }
+        ListenConfig::Unix { path } => {
+            let listener = UnixListener::bind(path).unwrap();
+            let incoming = UnixListenerStream::new(listener);
+            warp::serve(metrics).run_incoming(incoming).await;
+        }
+    }
 }
 
 async fn command(client: &AsyncClient, device: &Device, command: &str, body: &str) -> Result<()> {

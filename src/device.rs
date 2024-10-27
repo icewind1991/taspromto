@@ -1,6 +1,8 @@
 use color_eyre::{eyre::WrapErr, Report, Result};
 use jzon::JsonValue;
 use rumqttc::{AsyncClient, QoS};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
@@ -565,6 +567,16 @@ pub struct BDAddr {
     pub address: [u8; 6usize],
 }
 
+impl<'de> Deserialize<'de> for BDAddr {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str = <Cow<'de, str>>::deserialize(deserializer)?;
+        Self::from_mi_temp_mac_part(&str).map_err(D::Error::custom)
+    }
+}
+
 impl BDAddr {
     /// parse BDAddr from the last 6 characters of the mac address
     /// first 6 characters are always set to 582D34
@@ -803,6 +815,16 @@ impl RfDeviceId<'_> {
             id: self.id,
             channel: self.channel,
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for RfDeviceId<'static> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str = <Cow<'de, str>>::deserialize(deserializer)?;
+        Self::from_str(&str).map_err(D::Error::custom)
     }
 }
 

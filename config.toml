@@ -1,0 +1,11 @@
+[listen]
+port = 3030
+
+[names]
+mitemp = { 35f3d4 = "Bedroom" }
+rftemp = { "Bresser-3CH:73:1" = "Home" }
+
+[mqtt]
+hostname = "mqtt.icewind.link"
+username = "taspromto"
+password = "wYTYUkP10IP3LGiMOXHGbNjKLAMe6bjI"

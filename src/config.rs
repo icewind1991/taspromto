@@ -1,23 +1,86 @@
 use crate::device::{BDAddr, RfDeviceId};
 use color_eyre::{eyre::WrapErr, Report, Result};
 use rumqttc::MqttOptions;
+use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
+use std::fs::read_to_string;
+use std::net::{IpAddr, Ipv4Addr};
+use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
 
-#[derive(Default)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
-    pub mqtt_host: String,
-    pub mqtt_port: u16,
-    pub host_port: u16,
-    pub mi_temp_names: BTreeMap<BDAddr, String>,
-    pub rf_temp_names: HashMap<RfDeviceId<'static>, String>,
-    pub mqtt_credentials: Option<Credentials>,
+    pub listen: ListenConfig,
+    pub names: NamesConfig,
+    pub mqtt: MqttConfig,
 }
 
-pub struct Credentials {
-    username: String,
-    password: String,
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum ListenConfig {
+    Ip {
+        #[serde(default = "default_address")]
+        address: IpAddr,
+        port: u16,
+    },
+    Unix {
+        path: String,
+    },
+}
+
+fn default_address() -> IpAddr {
+    Ipv4Addr::UNSPECIFIED.into()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NamesConfig {
+    #[serde(rename = "mitemp")]
+    pub mi_temp: BTreeMap<BDAddr, String>,
+    #[serde(rename = "rftemp")]
+    pub rf_temp: HashMap<RfDeviceId<'static>, String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MqttConfig {
+    #[serde(rename = "hostname")]
+    host: String,
+    #[serde(default = "default_mqtt_port")]
+    port: u16,
+    #[serde(flatten)]
+    credentials: Option<Credentials>,
+}
+
+fn default_mqtt_port() -> u16 {
+    1883
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Credentials {
+    Raw {
+        username: String,
+        password: String,
+    },
+    File {
+        username: String,
+        password_file: String,
+    },
+}
+
+impl Credentials {
+    pub fn username(&self) -> String {
+        match self {
+            Credentials::Raw { username, .. } => username.clone(),
+            Credentials::File { username, .. } => username.clone(),
+        }
+    }
+    pub fn password(&self) -> String {
+        match self {
+            Credentials::Raw { password, .. } => password.clone(),
+            Credentials::File { password_file, .. } => secretfile::load(password_file).unwrap(),
+        }
+    }
 }
 
 impl Config {
@@ -68,19 +131,31 @@ impl Config {
             Ok(username) => {
                 let password = dotenvy::var("MQTT_PASSWORD")
                     .wrap_err("MQTT_USERNAME set, but MQTT_PASSWORD not set")?;
-                Some(Credentials { username, password })
+                Some(Credentials::Raw { username, password })
             }
             Err(_) => None,
         };
 
         Ok(Config {
-            mqtt_host,
-            mqtt_port,
-            host_port,
-            mi_temp_names,
-            rf_temp_names,
-            mqtt_credentials,
+            listen: ListenConfig::Ip {
+                port: host_port,
+                address: default_address(),
+            },
+            names: NamesConfig {
+                mi_temp: mi_temp_names,
+                rf_temp: rf_temp_names,
+            },
+            mqtt: MqttConfig {
+                port: mqtt_port,
+                host: mqtt_host,
+                credentials: mqtt_credentials,
+            },
         })
+    }
+
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Config> {
+        let raw = read_to_string(path)?;
+        Ok(toml::from_str(&raw)?)
     }
 
     pub fn mqtt(&self) -> Result<MqttOptions> {
@@ -89,11 +164,11 @@ impl Config {
             .map_err(|_| Report::msg("invalid hostname"))?;
         let mut mqtt_options = MqttOptions::new(
             format!("taspromto-{}", hostname),
-            &self.mqtt_host,
-            self.mqtt_port,
+            &self.mqtt.host,
+            self.mqtt.port,
         );
-        if let Some(credentials) = self.mqtt_credentials.as_ref() {
-            mqtt_options.set_credentials(&credentials.username, &credentials.password);
+        if let Some(credentials) = self.mqtt.credentials.as_ref() {
+            mqtt_options.set_credentials(credentials.username(), credentials.password());
         }
         mqtt_options.set_keep_alive(Duration::from_secs(5));
         Ok(mqtt_options)
