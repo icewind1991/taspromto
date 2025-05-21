@@ -1,3 +1,5 @@
+# Moved to https://codeberg.org/icewind/taspromto
+
 # taspromto
 
 Publish tasmota (and other) state into prometheus
